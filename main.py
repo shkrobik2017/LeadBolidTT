@@ -1,5 +1,7 @@
 from pyrogram import Client
 
+from db.mongodb_client_creator import MongoDBMotorDBSingletonCreator
+from logger.logger import logger
 from routers.bot_routers.router import router
 from scheduler.scheduler_setup import setup_scheduler, scheduler_stopping
 from tg_bot.depends import get_tg_app
@@ -20,19 +22,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await setup_scheduler(client)
 
     await client.start()
-    print("Telegram is running")
+    logger.info("Telegram is running")
 
     yield
 
     await client.stop()
-    print("Telegram is stopped")
+    logger.info("Telegram is stopped")
+    await scheduler_stopping()
+    await MongoDBMotorDBSingletonCreator.close_all_connections()
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(router=router, tags=["Bot Router"])
 
 
-@app.on_event("shutdown")
-async def stop_scheduler():
-    await scheduler_stopping()
-    print("Scheduler stopped")
 

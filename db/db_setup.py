@@ -1,6 +1,7 @@
 from beanie import init_beanie
 from db.db_data import MONGODB_BEANIE_MODELS_DATA
 from db.mongodb_client_creator import MongoDBMotorDBSingletonCreator
+from logger.logger import logger
 from settings import settings
 
 mongodb_motor_client = MongoDBMotorDBSingletonCreator(
@@ -19,3 +20,5 @@ async def run_init_mongodb_beanie() -> None:
         database=mongodb_motor_client,
         document_models=list(MONGODB_BEANIE_MODELS_DATA),
     )
+
+    logger.info("MongoDB initialized successful")

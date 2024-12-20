@@ -4,13 +4,13 @@ from pyrogram.types import Message, User
 from agent.main_agent import MainAgent
 from db.db_setup import run_init_mongodb_beanie
 from db.repository import DBRepository
-from settings import settings
+from logger.logger import logger
 
 
 def register_handlers(client: Client):
     @client.on_message(filters.private)
     async def handle_text_message(user: User, message: Message):
-        print("Message received")
+        logger.info(f"Message received from user: User={message.from_user=}, Message={message.text}")
         try:
             await run_init_mongodb_beanie()
 
@@ -26,7 +26,7 @@ def register_handlers(client: Client):
             )
 
             agent = MainAgent()
-            reply = await agent.generate_response(message.text)
+            reply = await agent.generate_response(content=message.text)
 
             await message.reply(reply)
 
@@ -36,6 +36,7 @@ def register_handlers(client: Client):
                 role="Agent"
             )
         except Exception as ex:
+            logger.error(f"An error occurred in TG message handler: {ex}")
             raise ex
 
 

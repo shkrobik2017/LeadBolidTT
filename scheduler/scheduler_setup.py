@@ -1,23 +1,26 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from logger.logger import logger
+from scheduler.scheduler_data_to_send import SCHEDULER_DATA_TO_SEND
 from scheduler.scheduler_tasks import send_scheduled_message
 
 scheduler = AsyncIOScheduler()
 
 
 async def setup_scheduler(client):
-    print("Scheduler starting...")
+    logger.info("Scheduler starting...")
     scheduler.add_job(
         send_scheduled_message,
-        trigger=IntervalTrigger(minutes=1),
-        id="send_message_job",  # Уникальный ID задачи
-        replace_existing=True,  # Перезаписать, если задача с таким ID уже есть
-        args=[client]
+        trigger=IntervalTrigger(hours=10),
+        id="send_message_job",
+        replace_existing=True,
+        args=[client, SCHEDULER_DATA_TO_SEND]
     )
     scheduler.start()
-    print("Scheduler is started")
+    logger.info("Scheduler is started")
 
 
 async def scheduler_stopping():
     scheduler.shutdown()
+    logger.info("Scheduler is stopped")

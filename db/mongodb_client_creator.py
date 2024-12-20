@@ -2,6 +2,8 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from urllib.parse import quote_plus
 from typing import ClassVar
 
+from logger.logger import logger
+
 
 class MongoDBMotorDBSingletonCreator:
     _instances: ClassVar[dict[tuple[str, str], "MongoDBMotorDBSingletonCreator"]] = {}
@@ -44,6 +46,7 @@ class MongoDBMotorDBSingletonCreator:
         for (db_url, db_name), instance in list(cls._instances.items()):
             try:
                 instance._client.close()
+                logger.info("Connection to MongoDB closed successful")
             except Exception as e:
-                print(f"Error in closing connection to {db_url}/{db_name}: {e}")
+                logger.error(f"Error in closing connection to {db_url}/{db_name}: {e}")
             del cls._instances[(db_url, db_name)]
