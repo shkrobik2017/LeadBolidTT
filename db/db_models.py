@@ -19,6 +19,8 @@ class MessageModel(CommonModel, Document):
     chat_id: UUIDStr
     content: str
     role: str
+    bot_id: int = Field(default="agent")
+    message_id: int
 
 
 class BotModel(CommonModel, Document):

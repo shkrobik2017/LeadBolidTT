@@ -1,12 +1,11 @@
 from fastapi import HTTPException
+from pyrogram.types import Message
 
 from db.db_models import UserModel, MessageModel, BotModel
 from logger.logger import logger
 
 
 class DBRepository:
-    roles: dict[str, str] = {"User": "user", "Agent": "agent", "Unknown": "unknown"}
-
     async def check_user_exist(self, *, user_id) -> UserModel | None:
         if user := await UserModel.find_one(UserModel.user_id == user_id):
             return user
@@ -28,25 +27,48 @@ class DBRepository:
             logger.error(f"An error occurred in saving user to DB: {ex}")
             raise ex
 
-    async def save_message(self, *, user_id, content, role) -> None:
+    async def save_message(
+            self,
+            *,
+            user_id: int,
+            msg: Message,
+            role: str,
+            is_image: bool = False,
+            bot_id: int | None = None
+    ) -> None:
         try:
-            if role in self.roles.keys():
-                message = MessageModel(
-                    chat_id=user_id,
-                    content=content,
-                    role=role
-                )
-            else:
-                message = MessageModel(
-                    chat_id=user_id,
-                    content=content,
-                    role=self.roles["Unknown"]
-                )
+            match role:
+                case "user":
+                    message = MessageModel(
+                        chat_id=user_id,
+                        content=msg.text,
+                        role=role,
+                        message_id=msg.id
+                    )
+                case "agent":
+                    text = msg.caption if is_image else msg.text
+                    message = MessageModel(
+                        chat_id=user_id,
+                        content=text,
+                        role=role,
+                        bot_id=bot_id,
+                        message_id=msg.id
+                    )
+                case _:
+                    message = MessageModel(
+                        chat_id=user_id,
+                        content=msg.text,
+                        role="unknown"
+                    )
             await message.create()
             logger.info(f"Message {message=} created successful")
         except Exception as ex:
             logger.error(f"An error occurred in saving message to DB: {ex}")
             raise ex
+
+    async def get_message_from_db(self, message_id):
+        if msg := await MessageModel.find_one(MessageModel.message_id == message_id):
+            return msg
 
     async def check_bot_existing(self, *, bot_name) -> BotModel | None:
         if bot_check := await BotModel.find_one(BotModel.bot_name == bot_name):
@@ -72,3 +94,10 @@ class DBRepository:
         except Exception as ex:
             logger.error(f"An error occurred in creating bot in DB: {ex}")
             raise ex
+
+    async def get_single_bot_from_db(self, bot_id) -> BotModel:
+        if bot := await BotModel.find_one(BotModel.bot_id == bot_id):
+            return bot
+
+    async def get_all_bots_from_db(self) -> list[BotModel]:
+        return await BotModel.find({}).to_list(length=None)
