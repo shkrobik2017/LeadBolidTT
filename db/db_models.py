@@ -24,3 +24,5 @@ class MessageModel(CommonModel, Document):
 class BotModel(CommonModel, Document):
     tg_user_bot_session: str
     bot_name: str
+    bot_id: int
+    status: str = Field(default="free")

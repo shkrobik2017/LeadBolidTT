@@ -52,13 +52,14 @@ class DBRepository:
         if bot_check := await BotModel.find_one(BotModel.bot_name == bot_name):
             return bot_check
 
-    async def create_new_bot(self, *, bot_name, tg_bot_user_session_string) -> BotModel:
+    async def create_new_bot(self, *, bot_name, tg_bot_user_session_string, bot_id) -> BotModel:
         try:
             bot = await self.check_bot_existing(bot_name=bot_name)
             if bot is None:
                 bot_model = BotModel(
                     tg_user_bot_session=tg_bot_user_session_string,
-                    bot_name=bot_name
+                    bot_name=bot_name,
+                    bot_id=bot_id
                 )
                 await bot_model.create()
                 return bot_model

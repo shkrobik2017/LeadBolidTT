@@ -24,6 +24,11 @@ class Settings(BaseSettings):
         description="Your TG account session string"
     )
 
+    TG_GROUP_NAME: str = Field(
+        ...,
+        description="Main TG group username"
+    )
+
     LLM_NAME: str = Field(
         ...,
         description="LLM name you use for response"
@@ -32,6 +37,11 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = Field(
         ...,
         description="Ollama model you choose"
+    )
+
+    BASE_OLLAMA_URL: str = Field(
+        default="http://ollama:11434",
+        description=""
     )
 
     OPENAI_MODEL: str = Field(

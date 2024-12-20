@@ -10,6 +10,7 @@ class MainAgent:
     def __init__(self):
         self.model = ChatOllama(
             model=settings.OLLAMA_MODEL,
+            base_url=settings.BASE_OLLAMA_URL
         ) if settings.LLM_NAME == "ollama" else ChatOpenAI(
             model_name=settings.OPENAI_MODEL,
             openai_api_key=settings.OPENAI_API_KEY

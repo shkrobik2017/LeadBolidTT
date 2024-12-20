@@ -13,7 +13,8 @@ router = APIRouter()
 )
 async def create_bot(
         bot_name: str,
-        tg_session_string: str
+        tg_session_string: str,
+        bot_tg_id: int
 ):
     await run_init_mongodb_beanie()
     repo = DBRepository()
@@ -23,7 +24,8 @@ async def create_bot(
         await check_bot_exist_and_create(
             bot_name=bot_name,
             session_string=tg_session_string,
-            repo=repo
+            repo=repo,
+            bot_id=bot_tg_id
         )
         return {"Successful": "Bot created successfully"}
     except Exception as ex:
