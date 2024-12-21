@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from fastapi import FastAPI
 
-from tg_bot.depends import create_clients, get_tg_app
+from tg_bot.depends import get_tg_app
 
 
 telegram_clients: list[Client] = []
