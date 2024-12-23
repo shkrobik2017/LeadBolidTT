@@ -1,7 +1,4 @@
-import asyncio
-
 from pyrogram import Client
-
 from db.mongodb_client_creator import MongoDBMotorDBSingletonCreator
 from logger.logger import logger
 from routers.bot_routers.router import router
@@ -11,9 +8,6 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from tg_bot.depends import get_tg_app
-
-
-telegram_clients: list[Client] = []
 
 
 @asynccontextmanager
