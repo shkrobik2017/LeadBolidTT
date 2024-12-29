@@ -1,26 +1,29 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-
 from logger.logger import logger
-from scheduler.scheduler_data_to_send import SCHEDULER_DATA_TO_SEND
-from scheduler.scheduler_tasks import send_scheduled_message
+from scheduler.scheduler_tasks import send_scheduled_message, agents_conversation_job
 
 scheduler = AsyncIOScheduler()
 
 
-async def setup_scheduler(client):
+async def setup_scheduler(client, repo, redis_client):
     logger.info("Scheduler starting...")
     scheduler.add_job(
         send_scheduled_message,
-        trigger=IntervalTrigger(hours=10),
+        trigger=IntervalTrigger(minutes=600),
         id="send_message_job",
         replace_existing=True,
-        args=[client, SCHEDULER_DATA_TO_SEND]
+        args=[client]
+    )
+    scheduler.add_job(
+        func=agents_conversation_job,
+        trigger=IntervalTrigger(minutes=2),
+        id="agents_conversation",
+        replace_existing=True,
+        args=[repo, redis_client]
     )
     scheduler.start()
-    logger.info("Scheduler is started")
 
 
 async def scheduler_stopping():
     scheduler.shutdown()
-    logger.info("Scheduler is stopped")

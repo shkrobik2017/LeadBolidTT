@@ -46,7 +46,6 @@ class MongoDBMotorDBSingletonCreator:
         for (db_url, db_name), instance in list(cls._instances.items()):
             try:
                 instance._client.close()
-                logger.info("Connection to MongoDB closed successful")
             except Exception as e:
                 logger.error(f"Error in closing connection to {db_url}/{db_name}: {e}")
             del cls._instances[(db_url, db_name)]

@@ -1,103 +1,129 @@
-from fastapi import HTTPException
-from pyrogram.types import Message
-
-from db.db_models import UserModel, MessageModel, BotModel
+from typing import List, Type
+from beanie.odm.queries.find import FindMany
+from db.db_models import MessageModel, ModelType, UserModel
+from db.db_services import error_handler
 from logger.logger import logger
+from redis_app.redis_repository import RedisClient
 
 
 class DBRepository:
-    async def check_user_exist(self, *, user_id) -> UserModel | None:
-        if user := await UserModel.find_one(UserModel.user_id == user_id):
-            return user
+    @staticmethod
+    @error_handler
+    async def check_object_existing_in_db(
+            *,
+            model: Type[ModelType],
+            filters: dict,
+    ) -> ModelType | None:
+        if not isinstance(model, MessageModel):
+            doc = await model.find(filters).first_or_none()
+            return doc
+        return None
 
-    async def create_user(self, *, user_id, username) -> UserModel | None:
-        try:
-            is_user = await self.check_user_exist(user_id=user_id)
-            if is_user is None:
-                user = UserModel(
-                    user_id=user_id,
-                    username=username
-                )
-                await user.create()
-                logger.info(f"User {user=} created successful")
-                return user
-            logger.info(f"User {is_user} already exist!")
-            return is_user
-        except Exception as ex:
-            logger.error(f"An error occurred in saving user to DB: {ex}")
-            raise ex
+    @staticmethod
+    @error_handler
+    async def get_many_objects_from_db(
+            *,
+            model: Type[ModelType],
+            redis: RedisClient
+    ) -> List[ModelType]:
+        objects_cache = await redis.get_by_key(f"{model}_all_objects")
+        if not objects_cache:
+            objects = await model.find({}).to_list(length=None)
+            serialized_object = [obj.dict() for obj in objects]
+            await redis.set_key(key=f"{model}_all_objects", value=serialized_object)
+            return objects
+        cached_models = [model(**item) for item in objects_cache]
+        logger.info(f"Return cached objects: {cached_models}")
+        return cached_models
 
-    async def save_message(
+    @staticmethod
+    @error_handler
+    async def get_chat_history(
+            *,
+            filters: dict,
+            is_for_summarizing: bool = False
+    ) -> FindMany[MessageModel] | list[tuple[str, str]]:
+        messages = MessageModel.find(filters)
+        if is_for_summarizing:
+            return messages
+        return [
+            (item.role, item.content)
+            for item in await messages.to_list(length=None)
+        ]
+
+    @error_handler
+    async def create_object(
             self,
             *,
-            user_id: int,
-            msg: Message,
-            role: str,
-            is_image: bool = False,
-            bot_id: int | None = None
-    ) -> None:
-        try:
-            match role:
-                case "user":
-                    message = MessageModel(
-                        chat_id=user_id,
-                        content=msg.text,
-                        role=role,
-                        message_id=msg.id
-                    )
-                case "agent":
-                    text = msg.caption if is_image else msg.text
-                    message = MessageModel(
-                        chat_id=user_id,
-                        content=text,
-                        role=role,
-                        bot_id=bot_id,
-                        message_id=msg.id
-                    )
-                case _:
-                    message = MessageModel(
-                        chat_id=user_id,
-                        content=msg.text,
-                        role="unknown"
-                    )
-            await message.create()
-            logger.info(f"Message {message=} created successful")
-        except Exception as ex:
-            logger.error(f"An error occurred in saving message to DB: {ex}")
-            raise ex
+            model: ModelType,
+            filters: dict | None = None,
+            redis: RedisClient
+    ) -> ModelType | None:
+        model_object = await self.check_object_existing_in_db(
+            model=type(model),
+            filters=filters,
+        )
+        if model_object is None or isinstance(model, MessageModel):
+            new_object = model
+            await new_object.create()
+            await redis.set_key(
+                key=f"{type(new_object)}_{new_object.id}",
+                value=new_object.dict()
+            )
+            logger.info(f"New {model} object created successful")
+            return new_object
+        logger.info(f"Object {model=}, {filters=} already exist!")
+        return model_object
 
-    async def get_message_from_db(self, message_id):
-        if msg := await MessageModel.find_one(MessageModel.message_id == message_id):
-            return msg
-
-    async def check_bot_existing(self, *, bot_name) -> BotModel | None:
-        if bot_check := await BotModel.find_one(BotModel.bot_name == bot_name):
-            return bot_check
-
-    async def create_new_bot(self, *, bot_name, tg_bot_user_session_string, bot_id) -> BotModel:
-        try:
-            bot = await self.check_bot_existing(bot_name=bot_name)
-            if bot is None:
-                bot_model = BotModel(
-                    tg_user_bot_session=tg_bot_user_session_string,
-                    bot_name=bot_name,
-                    bot_id=bot_id
+    @error_handler
+    async def update_object(
+            self,
+            *,
+            model: ModelType | Type[ModelType],
+            filters: dict | None = None,
+            redis: RedisClient,
+            update_data: dict
+    ):
+        cached_object = await redis.get_by_key(f"{type(model)}_{model.id}")
+        if not cached_object:
+            model_object = await self.check_object_existing_in_db(
+                model=type(model),
+                filters=filters,
+            )
+            if model_object is not None:
+                updated_object = await model_object.set(update_data)
+                await redis.set_key(
+                    key=f"{type(model)}_{updated_object.id}",
+                    value=updated_object.dict()
                 )
-                await bot_model.create()
-                return bot_model
-            else:
-                logger.error(f"Bot {bot_name=} is already existing")
-                raise HTTPException(
-                    status_code=400,
-                    detail={"Already existing": "Bot is already existing"}
-                )
-        except Exception as ex:
-            logger.error(f"An error occurred in creating bot in DB: {ex}")
-            raise ex
+                return updated_object
+            logger.error(f"Object {model=} not found when updating.")
+        updated_cached_object = await type(model)(**cached_object).set(update_data)
+        await redis.update(
+            key=f"{type(updated_cached_object)}_{updated_cached_object.id}",
+            value=updated_cached_object.dict()
+        )
+        return updated_cached_object
 
-    async def get_single_bot_from_db(self, bot_id) -> BotModel:
-        if bot := await BotModel.find_one(BotModel.bot_id == bot_id):
-            return bot
+    @error_handler
+    async def update_messages_status_and_save_summary(
+            self,
+            user_id: str,
+            summary: str,
+            redis_client: RedisClient
+    ):
+        messages = await self.get_chat_history(
+            filters={"user_id": user_id, "is_summarized": False},
+            is_for_summarizing=True
+        )
+        await messages.update_many(is_summarized=True)
+        logger.info(f"Messages for user {user_id=} summarized successful")
 
-    async def get_all_bots_from_db(self) -> list[BotModel]:
-        return await BotModel.find({}).to_list(length=None)
+        updated_user = await UserModel.find_one(UserModel.user_id == user_id).set({"summary": summary})
+        await redis_client.update(
+            key=f"{type(updated_user)}_{updated_user.id}",
+            value=updated_user.dict()
+        )
+        logger.info(f"User's {user_id=} summary updated successful: {summary=}")
+
+

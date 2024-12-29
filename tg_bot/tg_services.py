@@ -1,104 +1,117 @@
+import asyncio
+import random
 from asyncio import Queue
-
 from pyrogram import Client
 from pyrogram.types import Message
-
 from agent.main_agent import MainAgent
-from db.db_models import BotModel
-from db.db_setup import run_init_mongodb_beanie
+from db.db_models import BotModel, UserModel, MessageModel, GroupModel
+from db.db_services import error_handler
 from db.repository import DBRepository
 from logger.logger import logger
-from settings import settings
+from redis_app.redis_repository import RedisClient
 
 
+async def get_all_tg_group_names(repo: DBRepository, redis: RedisClient):
+    group_names = [item.group_name for item in await repo.get_many_objects_from_db(model=GroupModel, redis=redis)]
+    return group_names
+
+
+@error_handler
 async def message_putting_to_queue_process(
         *,
         bot: BotModel,
         message: Message,
         queue: Queue,
-        repo: DBRepository
+        repo: DBRepository,
+        redis_client: RedisClient
 ):
-    await bot.set({BotModel.status: "busy"})
+    updated_bot = await repo.update_object(
+        model=bot,
+        filters={"bot_id": bot.bot_id},
+        redis=redis_client,
+        update_data={BotModel.status: "busy"}
+    )
     tg_client = Client(
-        name=bot.bot_name,
-        session_string=bot.tg_user_bot_session
+        name=updated_bot.bot_name,
+        session_string=updated_bot.tg_user_bot_session
     )
 
     await queue.put((message, tg_client))
-    logger.info(f"Bot started generating response: {tg_client.name}")
     logger.info(f"Message putted to queue: {message}")
 
-    await queue_processing(queue, bot.bot_id, repo=repo)
+    await queue_processing(
+        queue=queue,
+        bot=updated_bot,
+        repo=repo,
+        redis_client=redis_client
+    )
 
 
-async def handle_text_message(client: Client, message: Message, repo: DBRepository):
+@error_handler
+async def handle_text_message(
+        client: Client,
+        message: Message,
+        repo: DBRepository,
+        redis_client: RedisClient
+):
     logger.info(f"Message received from user: User={message.from_user=}, Message={message.text}")
-    try:
-        await run_init_mongodb_beanie()
-        user_ins = await repo.create_user(
+    user_ins = await repo.create_object(
+        model=UserModel(
             user_id=str(message.from_user.id),
             username=message.from_user.username
-        )
-        await repo.save_message(
+        ),
+        filters={"user_id": str(message.from_user.id)},
+        redis=redis_client
+    )
+    await repo.create_object(
+        model=MessageModel(
             user_id=user_ins.user_id,
-            msg=message,
-            role="user",
-        )
+            content=message.text,
+            message_id=message.id,
+            role="user"
+        ),
+        filters={},
+        redis=redis_client
+    )
 
-        agent = MainAgent()
-        reply = await agent.generate_response(content=message.text)
+    chat_history = await repo.get_chat_history(
+        filters={"user_id": user_ins.user_id, "is_summarized": False}
+    )
 
-        reply = await client.send_message(settings.TG_GROUP_NAME, reply)
+    agent = MainAgent()
+    generated_reply = await agent.generate_response(
+        content=message.text,
+        chat_history=chat_history,
+        group_name=message.chat.username,
+        user_id=user_ins.user_id,
+        repo=repo,
+        redis_client=redis_client,
+        summary=user_ins.summary
+    )
 
-        await repo.save_message(
+    reply = await client.send_message(message.chat.username, generated_reply)
+
+    await repo.create_object(
+        model=MessageModel(
             user_id=user_ins.user_id,
-            msg=reply,
-            role="agent",
-            bot_id=client.me.id,
-        )
-    except Exception as ex:
-        logger.error(f"An error occurred in TG message handler: {ex}")
-        raise ex
+            content=reply.text,
+            role="assistant",
+            message_id=reply.id,
+            bot_id=client.me.id
+        ),
+        filters={},
+        redis=redis_client
+    )
 
 
-async def handle_text_message_with_image_reply(client: Client, message: Message, repo: DBRepository):
-    logger.info(f"Message received from user: User={message.from_user=}, Message={message.text}")
-    try:
-        await run_init_mongodb_beanie()
-        user_ins = await repo.create_user(
-            user_id=str(message.from_user.id),
-            username=message.from_user.username
-        )
-        await repo.save_message(
-            user_id=user_ins.user_id,
-            msg=message,
-            role="user",
-        )
-
-        # agent = MainAgent()
-        # reply = await agent.generate_response(content=message.text)
-
-        # await message.reply(reply)
-        reply = "Photo images.jpg send to the user"
-        reply_message = await client.send_photo(
-            settings.TG_GROUP_NAME,
-            "photos/293578.jpg",
-            caption=reply
-        )
-
-        await repo.save_message(
-            user_id=user_ins.user_id,
-            msg=reply_message,
-            role="agent",
-            bot_id=client.me.id,
-            is_image=True
-        )
-    except Exception as ex:
-        logger.error(f"An error occurred in TG message handler: {ex}")
-        raise ex
-
-
-async def queue_processing(queue: Queue, bot_id: int, repo: DBRepository):
+@error_handler
+async def queue_processing(
+        *,
+        queue: Queue,
+        bot: BotModel,
+        repo: DBRepository,
+        redis_client: RedisClient
+):
     try:
         while True:
             logger.info("Starting queue process")
@@ -113,26 +126,60 @@ async def queue_processing(queue: Queue, bot_id: int, repo: DBRepository):
                 await handle_text_message(
                     client=client,
                     message=msg,
-                    repo=repo
-                ) if client.name.lower().startswith("text") \
-                    else await handle_text_message_with_image_reply(
-                    client=client,
-                    message=msg,
-                    repo=repo
+                    repo=repo,
+                    redis_client=redis_client
                 )
 
                 queue.task_done()
                 logger.info("Task is done")
 
-                bot = await repo.get_single_bot_from_db(bot_id)
-                await bot.set({BotModel.status: "free"})
-
+                await repo.update_object(
+                    model=bot,
+                    filters={"bot_id": bot.bot_id},
+                    redis=redis_client,
+                    update_data={BotModel.status: "free"}
+                )
                 logger.info("Bot status set to free")
-    except Exception as ex:
-        logger.error(f"An error occurred in queue process: {ex}")
-        raise ex
     finally:
-        bot = await repo.get_single_bot_from_db(bot_id)
-        await bot.set({BotModel.status: "free"})
+        await repo.update_object(
+            model=bot,
+            filters={"bot_id": bot.bot_id},
+            redis=redis_client,
+            update_data={BotModel.status: "free"}
+        )
+
+
+@error_handler
+async def reply_to_message_process(repo: DBRepository, message: Message, queue: Queue, redis_client: RedisClient):
+    msg = await MessageModel.find_one(message_id=message.reply_to_message_id)
+    logger.info(f"{msg=}")
+    while True:
+        bot = await BotModel.find_one(bot_id=msg.bot_id)
+        if bot.status == "free":
+            await message_putting_to_queue_process(
+                bot=bot,
+                message=message,
+                queue=queue,
+                repo=repo,
+                redis_client=redis_client
+            )
+
+            break
+        await asyncio.sleep(15)
+
+
+@error_handler
+async def conversation_worker_process(bots, message, queue, repo, redis_client):
+    worker_bots = [
+        item for item in bots if item.is_in_worker and item.bot_id != message.from_user.id
+    ]
+    bot = random.choice(worker_bots)
+    await message_putting_to_queue_process(
+        bot=bot,
+        message=message,
+        queue=queue,
+        repo=repo,
+        redis_client=redis_client
+    )
 
 

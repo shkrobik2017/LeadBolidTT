@@ -89,5 +89,20 @@ class Settings(BaseSettings):
         description=""
     )
 
+    AGENTS_CONVERSATION_DURATION: int = Field(
+        default=1200,
+        description="Agents conversation job duration"
+    )
+
+    FASTAPI_CONTAINER_NAME: str = Field(
+        ...,
+        description="Name of the FastAPI docker image"
+    )
+
+    REDIS_URL: str = Field(
+        ...,
+        description="Redis URL"
+    )
+
 
 settings = Settings()
