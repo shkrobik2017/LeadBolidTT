@@ -17,6 +17,7 @@ router = APIRouter()
 async def create_tg_group(
         group_name: str,
         group_id: str,
+        group_prompt_name: str
 ):
     await run_init_mongodb_beanie()
     repo = DBRepository()
@@ -28,6 +29,7 @@ async def create_tg_group(
         await check_group_exist_and_create(
             group_name=group_name,
             group_id=group_id,
+            group_prompt_name=group_prompt_name,
             repo=repo,
             redis_client=redis_client
         )

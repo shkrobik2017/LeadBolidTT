@@ -1,5 +1,7 @@
+import asyncio
 from typing import List
 from langchain_core.globals import set_llm_cache
+from langchain_core.messages import BaseMessage
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langchain_community.cache import RedisCache
@@ -25,49 +27,52 @@ class MainAgent:
         self.summarizer = Summarizer(self.model)
 
     @staticmethod
-    async def _load_agent_role(group_name: str, redis_client: RedisClient) -> str:
-        cached_prompt = await redis_client.get_by_key(f"prompt_file_{group_name}")
+    async def _load_agent_role(group_prompt_name: str, redis_client: RedisClient) -> str:
+        cached_prompt = await redis_client.get_by_key(f"prompt_file_{group_prompt_name}")
         if not cached_prompt:
-            with open(f"agent/roles/{group_name}_agents_role.md", "r") as file:
+            with open(f"agent/roles/{group_prompt_name}.md", "r") as file:
                 result = file.read()
                 await redis_client.set_key(
-                    key=f"prompt_file_{group_name}",
+                    key=f"prompt_file_{group_prompt_name}",
                     value=result
                 )
                 return result
         return cached_prompt
+
+    async def check_tokens_count_in_background(
+            self,
+            redis_client: RedisClient,
+            chat_history: List[tuple],
+            repo: DBRepository,
+            user_id: str
+    ):
+        logger.info("Start chat history summarizing process.")
+        new_summary = await self.summarizer.summary(
+            redis_client=redis_client,
+            chat_history=chat_history
+        )
+        await repo.update_messages_status_and_save_summary(
+            user_id=user_id,
+            summary=new_summary,
+            redis_client=redis_client
+        )
 
     @error_handler
     async def generate_response(
             self,
             *,
             content: str,
-            user_id: str,
             chat_history: List[tuple],
-            group_name: str,
+            group_prompt_name: str,
             redis_client: RedisClient,
-            repo: DBRepository,
             summary: str
-    ) -> str:
+    ) -> BaseMessage:
         logger.info(f"Generating response for {content=} process is started")
-        prompt = await self.prompt_template(group_name=group_name, redis_client=redis_client)
+        prompt = await self.prompt_template(group_prompt_name=group_prompt_name, redis_client=redis_client)
 
         messages = [("system", prompt), ("system", summary)]
         messages.extend(chat_history)
 
-        print(messages)
-
         result = await self.model.ainvoke(messages)
-        if result.usage_metadata["input_tokens"] >= 500:
-            logger.info("Start chat history summarizing process.")
-            new_summary = await self.summarizer.summary(
-                redis_client=redis_client,
-                chat_history=chat_history
-            )
-            await repo.update_messages_status_and_save_summary(
-                user_id=user_id,
-                summary=new_summary,
-                redis_client=redis_client
-            )
         logger.info(f"Response generated successful: {result=}")
-        return result.content
+        return result

@@ -78,13 +78,12 @@ async def handle_text_message(
         filters={"user_id": user_ins.user_id, "is_summarized": False}
     )
 
+    group = await GroupModel.find_one(GroupModel.group_name == message.chat.username)
     agent = MainAgent()
     generated_reply = await agent.generate_response(
         content=message.text,
         chat_history=chat_history,
-        group_name=message.chat.username,
-        user_id=user_ins.user_id,
-        repo=repo,
+        group_prompt_name=group.group_prompt_name,
         redis_client=redis_client,
         summary=user_ins.summary
     )
@@ -102,6 +101,13 @@ async def handle_text_message(
         filters={},
         redis=redis_client
     )
+    if generated_reply.usage_metadata["input_tokens"] >= 1000:
+        await agent.check_tokens_count_in_background(
+            redis_client=redis_client,
+            chat_history=chat_history,
+            repo=repo,
+            user_id=user_ins.user_id
+        )
 
 
 @error_handler

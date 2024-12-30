@@ -12,6 +12,7 @@ async def check_group_exist_and_create(
         *,
         group_name: str,
         group_id: str,
+        group_prompt_name: str,
         repo: DBRepository,
         redis_client: RedisClient
 ):
@@ -19,7 +20,8 @@ async def check_group_exist_and_create(
         bot = await repo.create_object(
             model=GroupModel(
                 group_name=group_name,
-                group_id=group_id
+                group_id=group_id,
+                group_prompt_name=group_prompt_name
             ),
             filters={"group_id": group_id},
             redis=redis_client

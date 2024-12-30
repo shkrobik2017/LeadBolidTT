@@ -22,7 +22,7 @@ class Summarizer:
         return cached_prompt
 
     async def summary(self, redis_client: RedisClient, chat_history: List[tuple]):
-        prompt = self.prompt(redis_client=redis_client)
+        prompt = await self.prompt(redis_client=redis_client)
 
         messages = [("system", prompt)]
         messages.extend(chat_history)

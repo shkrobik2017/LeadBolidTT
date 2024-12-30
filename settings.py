@@ -90,8 +90,18 @@ class Settings(BaseSettings):
     )
 
     AGENTS_CONVERSATION_DURATION: int = Field(
-        default=1200,
-        description="Agents conversation job duration"
+        default=10,
+        description="Agents conversation job duration in minutes"
+    )
+
+    AGENTS_CONVERSATION_SCHEDULE: int = Field(
+        ...,
+        description="Count minutes after how much agents conversation worker will start"
+    )
+
+    SENDING_MEDIA_SCHEDULE: int = Field(
+        ...,
+        description="Count minutes after how much media will sent to group"
     )
 
     FASTAPI_CONTAINER_NAME: str = Field(

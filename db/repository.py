@@ -116,10 +116,13 @@ class DBRepository:
             filters={"user_id": user_id, "is_summarized": False},
             is_for_summarizing=True
         )
-        await messages.update_many(is_summarized=True)
+        for item in await messages.to_list(length=None):
+            await item.set({"is_summarized": True})
         logger.info(f"Messages for user {user_id=} summarized successful")
 
-        updated_user = await UserModel.find_one(UserModel.user_id == user_id).set({"summary": summary})
+        updated_user = await UserModel.find_one(UserModel.user_id == user_id)
+        updated_user.summary = summary
+        await updated_user.save()
         await redis_client.update(
             key=f"{type(updated_user)}_{updated_user.id}",
             value=updated_user.dict()

@@ -33,7 +33,7 @@ async def agents_conversation_job(repo: DBRepository, redis_client: RedisClient)
 
     await send_tg_text_message(client=client, content="Hello Guys) Let's talk about crypto?")
 
-    await asyncio.sleep(settings.AGENTS_CONVERSATION_DURATION)
+    await asyncio.sleep(settings.AGENTS_CONVERSATION_DURATION * 60)
 
     await update_client_to_conversation_job(repo=repo, position="finish", redis_client=redis_client)
     await set_worker_status(status=False, redis_client=redis_client)
