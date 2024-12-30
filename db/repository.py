@@ -78,32 +78,23 @@ class DBRepository:
     async def update_object(
             self,
             *,
-            model: ModelType | Type[ModelType],
+            model: ModelType,
             filters: dict | None = None,
             redis: RedisClient,
             update_data: dict
     ):
-        cached_object = await redis.get_by_key(f"{type(model)}_{model.id}")
-        if not cached_object:
-            model_object = await self.check_object_existing_in_db(
-                model=type(model),
-                filters=filters,
-            )
-            if model_object is not None:
-                updated_object = await model_object.set(update_data)
-                await redis.set_key(
-                    key=f"{type(model)}_{updated_object.id}",
-                    value=updated_object.dict()
-                )
-                return updated_object
-            logger.error(f"**MongoDB**: Object {model=} not found when updating.")
-        obj = type(model)(**cached_object)
-        updated_cached_object = await obj.set(update_data)
-        await redis.update(
-            key=f"{type(obj)}_{obj.id}",
-            value=updated_cached_object.dict()
+        model_object = await self.check_object_existing_in_db(
+            model=type(model),
+            filters=filters,
         )
-        return updated_cached_object
+        if model_object is not None:
+            updated_object = await model_object.set(update_data)
+            await redis.update(
+                key=f"{type(model)}_{updated_object.id}",
+                value=updated_object.dict()
+            )
+            logger.info(f"**MongoDB**: Model {model=} updated successful: {updated_object=}")
+            return updated_object
 
     @error_handler
     async def update_messages_status_and_save_summary(
