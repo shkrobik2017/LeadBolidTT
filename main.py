@@ -25,6 +25,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await redis_client.connect()
     logger.info("Connected to Redis")
 
+    await repo.set_bot_statuses_to_free(redis_client=redis_client)
+    logger.info("Bots statuses set to free")
+
     main_client = await get_tg_app(repo, redis_client)
     logger.info("Telegram client is running")
 

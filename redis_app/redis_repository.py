@@ -18,7 +18,7 @@ class RedisClient:
         try:
             self.redis = await redis.Redis.from_url(self.redis_url, decode_responses=True)
         except Exception as ex:
-            logger.error(f"Failed to connect to Redis: {ex}")
+            logger.error(f"**Redis**: Failed to connect to Redis: {ex}")
             raise ex
 
     async def close_con(self):
@@ -31,9 +31,9 @@ class RedisClient:
         try:
             serialized_value = json.dumps(value) if value is not str else value
             await self.redis.set(key, serialized_value, ex=ex)
-            logger.info(f"Set key '{key}' in Redis.")
+            logger.info(f"**Redis**: Set key '{key}' in Redis.")
         except Exception as ex:
-            logger.error(f"Failed to set key '{key}' in Redis: {ex}")
+            logger.error(f"**Redis**: Failed to set key '{key}' in Redis: {ex}")
             raise ex
 
     async def update(self, key: str, value: Any):
@@ -41,11 +41,11 @@ class RedisClient:
         try:
             if await self.check_exist(key):
                 await self.set_key(key, value)
-                logger.info(f"Updated key '{key}' in Redis.")
+                logger.info(f"**Redis**: Updated key '{key}' in Redis.")
             else:
-                logger.warning(f"Key '{key}' does not exist in Redis. Cannot update.")
+                logger.warning(f"**Redis**: Key '{key}' does not exist in Redis. Cannot update.")
         except Exception as ex:
-            logger.error(f"Failed to update key '{key}' in Redis: {ex}")
+            logger.error(f"**Redis**: Failed to update key '{key}' in Redis: {ex}")
             raise ex
 
     async def get_by_key(self, key: str) -> GetReturnType | None:
@@ -53,32 +53,32 @@ class RedisClient:
         try:
             value = await self.redis.get(key)
             if value:
-                logger.info(f"Retrieved key '{key}' from Redis.")
+                logger.info(f"**Redis**: Retrieved key '{key}' from Redis.")
                 deserialized_value = json.loads(value)
                 return deserialized_value
-            logger.info(f"Cache with {key=} not found")
+            logger.info(f"**Redis**: Cache with {key=} not found")
             return None
         except Exception as ex:
-            logger.error(f"Failed to get key '{key}' from Redis: {ex}")
+            logger.error(f"**Redis**: Failed to get key '{key}' from Redis: {ex}")
             raise ex
 
     async def delete_key(self, key: str):
         """Delete a key from Redis."""
         try:
             await self.redis.delete(key)
-            logger.info(f"Deleted key '{key}' from Redis.")
+            logger.info(f"**Redis**: Deleted key '{key}' from Redis.")
         except Exception as ex:
-            logger.error(f"Failed to delete key '{key}' from Redis: {ex}")
+            logger.error(f"**Redis**: Failed to delete key '{key}' from Redis: {ex}")
             raise ex
 
     async def check_exist(self, key: str) -> bool:
         """Check if a key exists in Redis."""
         try:
             exists = await self.redis.exists(key)
-            logger.info(f"Checked existence of key '{key}' in Redis: {bool(exists)}")
+            logger.info(f"**Redis**: Checked existence of key '{key}' in Redis: {bool(exists)}")
             return bool(exists)
         except Exception as ex:
-            logger.error(f"Failed to check existence of key '{key}' in Redis: {ex}")
+            logger.error(f"**Redis**: Failed to check existence of key '{key}' in Redis: {ex}")
             raise ex
 
 

@@ -46,7 +46,7 @@ class MainAgent:
             repo: DBRepository,
             user_id: str
     ):
-        logger.info("Start chat history summarizing process.")
+        logger.info("**LLM_Agent**: Start chat history summarizing process.")
         new_summary = await self.summarizer.summary(
             redis_client=redis_client,
             chat_history=chat_history
@@ -67,12 +67,12 @@ class MainAgent:
             redis_client: RedisClient,
             summary: str
     ) -> BaseMessage:
-        logger.info(f"Generating response for {content=} process is started")
+        logger.info(f"**LLM_Agent**: Generating response for {content=} process is started")
         prompt = await self.prompt_template(group_prompt_name=group_prompt_name, redis_client=redis_client)
 
         messages = [("system", prompt), ("system", summary)]
         messages.extend(chat_history)
 
         result = await self.model.ainvoke(messages)
-        logger.info(f"Response generated successful: {result=}")
+        logger.info(f"**LLM_Agent**: Response generated successful: {result=}")
         return result

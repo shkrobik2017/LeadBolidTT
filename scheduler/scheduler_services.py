@@ -48,12 +48,14 @@ async def update_client_to_conversation_job(repo: DBRepository, position: str, r
     for item in bots:
         await item.set(query)
         item.status = "busy"
-    serialized_object = [obj.dict() for obj in bots]
-    await redis_client.set_key(
-        key=f"bots_conversation",
-        value=serialized_object,
-        ex=settings.AGENTS_CONVERSATION_DURATION
-    )
+    if position == "start":
+        serialized_object = [obj.dict() for obj in bots]
+        await redis_client.set_key(
+            key=f"bots_conversation",
+            value=serialized_object,
+        )
+    elif position == "finish":
+        await redis_client.delete_key("bots_conversation")
     return random.choice(bots)
 
 
@@ -61,6 +63,11 @@ async def set_worker_status(redis_client: RedisClient, status: bool):
     await redis_client.set_key(key="worker_running", value=int(status))
 
 
+async def update_worker_status(redis_client: RedisClient, status: bool):
+    await redis_client.update(key="worker_running", value=int(status))
+
+
 async def is_worker_running(redis_client: RedisClient):
     status = await redis_client.get_by_key("worker_running")
+    logger.info(f"**ConversationWorker**: Worker status is {status}")
     return status == 1

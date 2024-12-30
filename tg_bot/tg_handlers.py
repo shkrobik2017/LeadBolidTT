@@ -18,14 +18,15 @@ queue = asyncio.Queue()
 
 async def register_handler(client: Client, repo: DBRepository, redis_client: RedisClient):
     group_names = await get_all_tg_group_names(repo=repo, redis=redis_client)
-    logger.info(f"Groups fetched successful: {group_names=}")
+    logger.info(f"**Telegram**: Groups fetched successful: {group_names=}")
 
     @error_handler
     @client.on_message(filters.chat(group_names))
     async def handle_group_message(user: User, message: Message):
-        logger.info("Starting message handler process")
+        logger.info("**Telegram**: Starting message handler process")
 
         await run_init_mongodb_beanie()
+        await asyncio.sleep(2)
 
         if message.reply_to_message:
             await reply_to_message_process(
@@ -39,7 +40,7 @@ async def register_handler(client: Client, repo: DBRepository, redis_client: Red
             bot_ids = [item.bot_id for item in bots]
 
             if message.from_user.id in bot_ids:
-                logger.info(f"Wrote existing bot: {message.from_user.username=}")
+                logger.info(f"**Telegram**: Wrote existing bot: {message.from_user.username=}")
                 if await is_worker_running(redis_client=redis_client) and message.chat.username == settings.TG_GROUP_NAME:
                     bots = [BotModel(**item) for item in await redis_client.get_by_key("bots_conversation")]
                     await conversation_worker_process(

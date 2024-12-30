@@ -1,6 +1,6 @@
 from typing import List, Type
 from beanie.odm.queries.find import FindMany
-from db.db_models import MessageModel, ModelType, UserModel
+from db.db_models import MessageModel, ModelType, UserModel, BotModel
 from db.db_services import error_handler
 from logger.logger import logger
 from redis_app.redis_repository import RedisClient
@@ -33,7 +33,6 @@ class DBRepository:
             await redis.set_key(key=f"{model}_all_objects", value=serialized_object)
             return objects
         cached_models = [model(**item) for item in objects_cache]
-        logger.info(f"Return cached objects: {cached_models}")
         return cached_models
 
     @staticmethod
@@ -70,7 +69,7 @@ class DBRepository:
                 key=f"{type(new_object)}_{new_object.id}",
                 value=new_object.dict()
             )
-            logger.info(f"New {model} object created successful")
+            logger.info(f"**MongoDB**: New {model} object created successful")
             return new_object
         logger.info(f"Object {model=}, {filters=} already exist!")
         return model_object
@@ -97,7 +96,7 @@ class DBRepository:
                     value=updated_object.dict()
                 )
                 return updated_object
-            logger.error(f"Object {model=} not found when updating.")
+            logger.error(f"**MongoDB**: Object {model=} not found when updating.")
         updated_cached_object = await type(model)(**cached_object).set(update_data)
         await redis.update(
             key=f"{type(updated_cached_object)}_{updated_cached_object.id}",
@@ -118,7 +117,7 @@ class DBRepository:
         )
         for item in await messages.to_list(length=None):
             await item.set({"is_summarized": True})
-        logger.info(f"Messages for user {user_id=} summarized successful")
+        logger.info(f"**MongoDB**: Messages for user {user_id=} summarized successful")
 
         updated_user = await UserModel.find_one(UserModel.user_id == user_id)
         updated_user.summary = summary
@@ -127,6 +126,13 @@ class DBRepository:
             key=f"{type(updated_user)}_{updated_user.id}",
             value=updated_user.dict()
         )
-        logger.info(f"User's {user_id=} summary updated successful: {summary=}")
+        logger.info(f"**MongoDB**: User's {user_id=} summary updated successful: {summary=}")
+
+    @staticmethod
+    async def set_bot_statuses_to_free(redis_client: RedisClient):
+        bots = await BotModel.find({}).to_list(length=None)
+        for item in bots:
+            await item.set({"status": "free", "is_in_worker": False})
+        await redis_client.delete_key("bots_conversation")
 
 

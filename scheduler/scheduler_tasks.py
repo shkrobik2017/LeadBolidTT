@@ -9,7 +9,7 @@ from scheduler.scheduler_services import (
     send_tg_photo_message,
     update_client_to_conversation_job,
     send_tg_text_message,
-    set_worker_status
+    set_worker_status, update_worker_status
 )
 from settings import settings
 
@@ -23,20 +23,24 @@ async def send_scheduled_message(client: Client):
 
 
 async def agents_conversation_job(repo: DBRepository, redis_client: RedisClient):
-    bot = await update_client_to_conversation_job(repo=repo, position="start", redis_client=redis_client)
-    await set_worker_status(redis_client=redis_client, status=True)
+    try:
+        bot = await update_client_to_conversation_job(repo=repo, position="start", redis_client=redis_client)
+        await set_worker_status(redis_client=redis_client, status=True)
 
-    client = Client(
-        name=bot.bot_name,
-        session_string=bot.tg_user_bot_session
-    )
+        client = Client(
+            name=bot.bot_name,
+            session_string=bot.tg_user_bot_session
+        )
 
-    await send_tg_text_message(client=client, content="Hello Guys) Let's talk about crypto?")
+        await send_tg_text_message(client=client, content="Hello Guys) Let's talk about crypto?")
 
-    await asyncio.sleep(settings.AGENTS_CONVERSATION_DURATION * 60)
+        await asyncio.sleep(settings.AGENTS_CONVERSATION_DURATION * 60)
 
-    await update_client_to_conversation_job(repo=repo, position="finish", redis_client=redis_client)
-    await set_worker_status(status=False, redis_client=redis_client)
+        await update_client_to_conversation_job(repo=repo, position="finish", redis_client=redis_client)
+        await update_worker_status(status=False, redis_client=redis_client)
+    finally:
+        await update_client_to_conversation_job(repo=repo, position="finish", redis_client=redis_client)
+        await update_worker_status(status=False, redis_client=redis_client)
 
 
 

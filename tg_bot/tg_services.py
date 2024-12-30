@@ -1,10 +1,12 @@
 import asyncio
 import random
 from asyncio import Queue
+from typing import Type
+
 from pyrogram import Client
 from pyrogram.types import Message
 from agent.main_agent import MainAgent
-from db.db_models import BotModel, UserModel, MessageModel, GroupModel
+from db.db_models import BotModel, UserModel, MessageModel, GroupModel, ModelType
 from db.db_services import error_handler
 from db.repository import DBRepository
 from logger.logger import logger
@@ -14,6 +16,15 @@ from redis_app.redis_repository import RedisClient
 async def get_all_tg_group_names(repo: DBRepository, redis: RedisClient):
     group_names = [item.group_name for item in await repo.get_many_objects_from_db(model=GroupModel, redis=redis)]
     return group_names
+
+
+async def update_many_objects_cache(*, model: Type[ModelType], redis_client: RedisClient):
+    bots = await model.find({}).to_list(length=None)
+    serialized_object = [obj.dict() for obj in bots]
+    await redis_client.update(
+        key=f"{BotModel}_all_objects",
+        value=serialized_object
+    )
 
 
 @error_handler
@@ -31,13 +42,14 @@ async def message_putting_to_queue_process(
         redis=redis_client,
         update_data={BotModel.status: "busy"}
     )
+    await update_many_objects_cache(model=BotModel, redis_client=redis_client)
     tg_client = Client(
         name=updated_bot.bot_name,
         session_string=updated_bot.tg_user_bot_session
     )
 
     await queue.put((message, tg_client))
-    logger.info(f"Message putted to queue: {message}")
+    logger.info(f"**Telegram**: Message putted to queue: {message.text}")
 
     await queue_processing(
         queue=queue,
@@ -54,7 +66,7 @@ async def handle_text_message(
         repo: DBRepository,
         redis_client: RedisClient
 ):
-    logger.info(f"Message received from user: User={message.from_user=}, Message={message.text}")
+    logger.info(f"**Telegram**: Message received from user: User={message.from_user=}, Message={message.text}")
     user_ins = await repo.create_object(
         model=UserModel(
             user_id=str(message.from_user.id),
@@ -68,7 +80,8 @@ async def handle_text_message(
             user_id=user_ins.user_id,
             content=message.text,
             message_id=message.id,
-            role="user"
+            role="user",
+            bot_id=client.me.id
         ),
         filters={},
         redis=redis_client
@@ -118,49 +131,42 @@ async def queue_processing(
         repo: DBRepository,
         redis_client: RedisClient
 ):
-    try:
-        while True:
-            logger.info("Starting queue process")
-            message = await queue.get()
 
-            if message is None:
-                break
+    while True:
+        logger.info("**Telegram**: Starting queue process")
+        message = await queue.get()
 
-            msg, tg_client = message
+        if message is None:
+            break
 
-            async with tg_client as client:
-                await handle_text_message(
-                    client=client,
-                    message=msg,
-                    repo=repo,
-                    redis_client=redis_client
-                )
+        msg, tg_client = message
 
-                queue.task_done()
-                logger.info("Task is done")
+        async with tg_client as client:
+            await handle_text_message(
+                client=client,
+                message=msg,
+                repo=repo,
+                redis_client=redis_client
+            )
 
-                await repo.update_object(
-                    model=bot,
-                    filters={"bot_id": bot.bot_id},
-                    redis=redis_client,
-                    update_data={BotModel.status: "free"}
-                )
-                logger.info("Bot status set to free")
-    finally:
-        await repo.update_object(
-            model=bot,
-            filters={"bot_id": bot.bot_id},
-            redis=redis_client,
-            update_data={BotModel.status: "free"}
-        )
+            queue.task_done()
+            logger.info("**Telegram**: Task is done")
+
+            await repo.update_object(
+                model=bot,
+                filters={"bot_id": bot.bot_id},
+                redis=redis_client,
+                update_data={BotModel.status: "free"}
+            )
+            await update_many_objects_cache(model=BotModel, redis_client=redis_client)
+            logger.info("**Telegram**: Bot status set to free")
 
 
 @error_handler
 async def reply_to_message_process(repo: DBRepository, message: Message, queue: Queue, redis_client: RedisClient):
-    msg = await MessageModel.find_one(message_id=message.reply_to_message_id)
-    logger.info(f"{msg=}")
+    msg = await MessageModel.find_one(MessageModel.message_id == message.reply_to_message_id)
     while True:
-        bot = await BotModel.find_one(bot_id=msg.bot_id)
+        bot = await BotModel.find_one(BotModel.bot_id == msg.bot_id)
         if bot.status == "free":
             await message_putting_to_queue_process(
                 bot=bot,

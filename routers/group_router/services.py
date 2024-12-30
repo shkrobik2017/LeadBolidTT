@@ -6,6 +6,7 @@ from db.db_services import get_uuid4_id
 from db.repository import DBRepository
 from logger.logger import logger
 from redis_app.redis_repository import RedisClient
+from tg_bot.tg_services import update_many_objects_cache
 
 
 async def check_group_exist_and_create(
@@ -24,12 +25,7 @@ async def check_group_exist_and_create(
             filters={"group_name": group_name},
             redis=redis_client
         )
-        objects = await GroupModel.find({}).to_list(length=None)
-        serialized_object = [obj.dict() for obj in objects]
-        await redis_client.update(
-            key=f"{GroupModel}_all_objects",
-            value=serialized_object
-        )
+        await update_many_objects_cache(model=GroupModel, redis_client=redis_client)
 
         return bot
     except Exception as ex:
