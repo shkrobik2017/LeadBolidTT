@@ -11,7 +11,6 @@ from redis_app.redis_repository import RedisClient
 async def check_group_exist_and_create(
         *,
         group_name: str,
-        group_id: str,
         group_prompt_name: str,
         repo: DBRepository,
         redis_client: RedisClient
@@ -20,11 +19,16 @@ async def check_group_exist_and_create(
         bot = await repo.create_object(
             model=GroupModel(
                 group_name=group_name,
-                group_id=group_id,
                 group_prompt_name=group_prompt_name
             ),
-            filters={"group_id": group_id},
+            filters={"group_name": group_name},
             redis=redis_client
+        )
+        objects = await GroupModel.find({}).to_list(length=None)
+        serialized_object = [obj.dict() for obj in objects]
+        await redis_client.update(
+            key=f"{GroupModel}_all_objects",
+            value=serialized_object
         )
 
         return bot
@@ -34,5 +38,5 @@ async def check_group_exist_and_create(
 
 def restart_application():
     pid = os.getpid()
-    print(f"Restarting application (PID: {pid})...")
+    logger.info(f"Restarting application (PID: {pid})...")
     os.kill(pid, signal.SIGTERM)

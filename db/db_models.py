@@ -38,7 +38,6 @@ class BotModel(BaseDocument):
 
 
 class GroupModel(BaseDocument):
-    group_id: int
     group_name: str
     group_prompt_name: str
 

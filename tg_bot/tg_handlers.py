@@ -17,11 +17,11 @@ queue = asyncio.Queue()
 
 
 async def register_handler(client: Client, repo: DBRepository, redis_client: RedisClient):
-    group_ids = await get_all_tg_group_names(repo=repo, redis=redis_client)
-    logger.info(f"Groups fetched successful: {group_ids=}")
+    group_names = await get_all_tg_group_names(repo=repo, redis=redis_client)
+    logger.info(f"Groups fetched successful: {group_names=}")
 
     @error_handler
-    @client.on_message(filters.chat(group_ids))
+    @client.on_message(filters.chat(group_names))
     async def handle_group_message(user: User, message: Message):
         logger.info("Starting message handler process")
 
