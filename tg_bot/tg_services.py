@@ -88,12 +88,12 @@ async def handle_text_message(
         summary=user_ins.summary
     )
 
-    reply = await client.send_message(message.chat.username, generated_reply)
+    reply = await client.send_message(message.chat.username, generated_reply.content)
 
     await repo.create_object(
         model=MessageModel(
             user_id=user_ins.user_id,
-            content=reply.text,
+            content=generated_reply.content,
             role="assistant",
             message_id=reply.id,
             bot_id=client.me.id

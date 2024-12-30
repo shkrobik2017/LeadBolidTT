@@ -30,7 +30,7 @@ class MainAgent:
     async def _load_agent_role(group_prompt_name: str, redis_client: RedisClient) -> str:
         cached_prompt = await redis_client.get_by_key(f"prompt_file_{group_prompt_name}")
         if not cached_prompt:
-            with open(f"agent/roles/{group_prompt_name}.md", "r") as file:
+            with open(f"agent/roles/{group_prompt_name}_group_prompt.md", "r") as file:
                 result = file.read()
                 await redis_client.set_key(
                     key=f"prompt_file_{group_prompt_name}",

@@ -6,6 +6,7 @@ from db.db_setup import run_init_mongodb_beanie
 from db.repository import DBRepository
 from logger.logger import logger
 from redis_app.redis_repository import RedisClient
+from routers.group_router.depends import POSSIBLE_PROMPT_NAMES
 from routers.group_router.services import check_group_exist_and_create, restart_application
 
 router = APIRouter()
@@ -18,6 +19,15 @@ async def create_tg_group(
         group_name: str,
         group_prompt_name: str
 ):
+    if group_prompt_name not in POSSIBLE_PROMPT_NAMES:
+        logger.error("Provided invalid group prompt name")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "Bad Request": f"Provided invalid group prompt name: {group_prompt_name}."
+                               f"\nValid prompt names: crypto, financial"
+            }
+        )
     await run_init_mongodb_beanie()
     repo = DBRepository()
     redis_client = RedisClient()
