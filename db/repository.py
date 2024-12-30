@@ -97,9 +97,10 @@ class DBRepository:
                 )
                 return updated_object
             logger.error(f"**MongoDB**: Object {model=} not found when updating.")
-        updated_cached_object = await type(model)(**cached_object).set(update_data)
+        obj = type(model)(**cached_object)
+        updated_cached_object = await obj.set(update_data)
         await redis.update(
-            key=f"{type(updated_cached_object)}_{updated_cached_object.id}",
+            key=f"{type(obj)}_{obj.id}",
             value=updated_cached_object.dict()
         )
         return updated_cached_object
