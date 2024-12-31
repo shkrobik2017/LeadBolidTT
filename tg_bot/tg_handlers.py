@@ -40,7 +40,7 @@ async def register_handler(client: Client, repo: DBRepository, redis_client: Red
             bot_ids = [item.bot_id for item in bots]
 
             if message.from_user.id in bot_ids:
-                logger.info(f"**Telegram**: Wrote existing bot: {message.from_user.username=}")
+                logger.info(f"**Telegram**: Wrote existing bot: {message.from_user.phone_number=}")
                 if await is_worker_running(redis_client=redis_client) and message.chat.username == settings.TG_GROUP_NAME:
                     bots = [BotModel(**item) for item in await redis_client.get_by_key("bots_conversation")]
                     await conversation_worker_process(

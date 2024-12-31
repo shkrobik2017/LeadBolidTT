@@ -70,7 +70,7 @@ async def handle_text_message(
     user_ins = await repo.create_object(
         model=UserModel(
             user_id=str(message.from_user.id),
-            username=message.from_user.username
+            username=message.from_user.username if message.from_user.username else "No username"
         ),
         filters={"user_id": str(message.from_user.id)},
         redis=redis_client
