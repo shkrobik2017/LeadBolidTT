@@ -101,6 +101,8 @@ async def handle_text_message(
         summary=user_ins.summary
     )
 
+    await asyncio.sleep(10)
+
     reply = await client.send_message(message.chat.username, generated_reply.content)
 
     await repo.create_object(
